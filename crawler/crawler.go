@@ -18,6 +18,7 @@ import (
 
 type HashWeek [7][6]int
 
+var CquptUrl = ""
 
 //<div id="kbStuTabs-list"[\s\S\w\W]*<div>*?
 
@@ -41,6 +42,7 @@ func StoreClassStuId(classStuId []string,classId string,client redis.Conn)bool{
 		_,err=client.Do("SADD",classId,v)
 		if err != nil {
 			log.Println("redis sadd failed:",err)
+			RedisInit()
 			return false
 		}
 	}
@@ -54,6 +56,7 @@ func GetClassHash(week int,classId string,client redis.Conn)(hash HashWeek){
 	classStuIds,err:=redis.Strings(client.Do("SMEMBERS",classId))
 	if err != nil {
 		log.Println("get the classStuIds failed:",err)
+		RedisInit()
 		return
 	}
 	var classHash []HashWeek
@@ -74,6 +77,25 @@ func GetClassHash(week int,classId string,client redis.Conn)(hash HashWeek){
 	return
 }
 
+//输入周数和学号集合获得该班级的哈希表(若有一人有课就为1,若都没课为0)
+func GetAllHash(week int,stuIds []string)(hash HashWeek){
+	var allHash []HashWeek
+	allHash=make([]HashWeek,len(stuIds))
+	for k,v:=range stuIds{
+		allHash[k]=GetStuWeek(v,week)
+	}
+	for _,v:=range allHash{
+		for kk,vv:=range v{
+			for kkk,vvv:=range vv{
+				hash[kk][kkk]+=vvv
+				if hash[kk][kkk]>1{
+					hash[kk][kkk]=1
+				}
+			}
+		}
+	}
+	return
+}
 
 //通过输入学号和周数得到该学生该周的哈希课表
 func GetStuWeek(stuId string,week int)(hash HashWeek){
@@ -86,12 +108,12 @@ func GetStuWeek(stuId string,week int)(hash HashWeek){
 
 
 func GetHtml(stuId string)string{
-	resp,err:=http.Get("http://jwzx.cqu.pt/kebiao/kb_stu.php?xh="+stuId+"#kbStuTabs-list")
+	resp,err:=http.Get(CquptUrl+"/kebiao/kb_stu.php?xh="+stuId+"#kbStuTabs-list")
 	if err != nil {
 		panic(err.Error())
 	}
 	defer func(){
-		resp.Body.Close()
+		_=resp.Body.Close()
 	}()
 	bytes,err:=ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -221,7 +243,7 @@ func getClassHtml()string{
 		panic(err.Error())
 	}
 	defer func(){
-		resp.Body.Close()
+		_=resp.Body.Close()
 	}()
 	bytes,err:=ioutil.ReadAll(resp.Body)
 	if err != nil {
